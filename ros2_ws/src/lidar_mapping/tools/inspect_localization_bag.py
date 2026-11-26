@@ -3,6 +3,7 @@
 import argparse
 import bisect
 from collections import Counter
+import csv
 import json
 
 from rclpy.serialization import deserialize_message
@@ -13,7 +14,7 @@ CLOUD = "/utlidar/cloud_base"
 ODOM = "/utlidar/robot_odom"
 
 
-def inspect_bag(uri):
+def inspect_bag(uri, cloud_stamps):
     reader = SequentialReader()
     reader.open(StorageOptions(uri=uri, storage_id="mcap"), ConverterOptions("cdr", "cdr"))
     topics = {row.name: row.type for row in reader.get_all_topics_and_types()}
@@ -46,6 +47,11 @@ def inspect_bag(uri):
             gaps.append(0)
         elif 0 < i < len(odom_stamps):
             gaps.append(odom_stamps[i] - odom_stamps[i - 1])
+    if cloud_stamps:
+        with open(cloud_stamps, "w", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(("stamp_ns", "storage_ns"))
+            writer.writerows(records[CLOUD])
     print(json.dumps({
         "types": topics,
         "tf_topics": [name for name in topics if name in ("/tf", "/tf_static")],
@@ -68,4 +74,6 @@ def inspect_bag(uri):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bag")
-    inspect_bag(parser.parse_args().bag)
+    parser.add_argument("--cloud-stamps")
+    args = parser.parse_args()
+    inspect_bag(args.bag, args.cloud_stamps)

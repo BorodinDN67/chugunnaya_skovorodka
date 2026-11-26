@@ -209,12 +209,26 @@ PLAY_SECONDS=10 PLAY_RATE=1.0 bash "$pkg/tools/run_localization.sh" \
 `results/mapping-rechecked/map.pcd`. Для другой карты или точки старта
 укажите свою начальную позу. Локальный GICP зависит от неё.
 
-Скрипт сохраняет `bag-info.txt`, `input.json`, `live-topics.txt`,
-`trajectory.csv`, `summary.json` и выходной MCAP. Он проверяет пустой
+Скрипт сохраняет `bag-info.txt`, `input.json`, `input-scans.csv`,
+`live-topics.txt`, `commands.log`, `environment.txt`, `trajectory.csv`,
+`summary.json` и выходной MCAP. Он проверяет пустой
 ROS-граф перед запуском, воспроизводит только два входа с `/clock` и загружает
 конфигурацию `use_sim_time: true` из `config/localization.yaml`.
 В RViz используйте Fixed Frame `map`. Для карты выберите Transient Local,
 для совмещённого облака — Best Effort. Параметр `publish_map_to_odom`
 по умолчанию выключен. Перед включением проверьте издателей
 `ros2 topic info -v /tf` и `ros2 topic info -v /tf_static` и наличие
-нужной ветки `odom -> base_link`.
+нужной ветки `odom -> base_link`. В выделенном графе без издателей TF
+`RECORD_TF=1` включает обе дуги из оценок этого узла и записывает `/tf`.
+`PLAY_SECONDS=full` оставляет проигрыватель до естественного конца.
+
+Для визуальной проверки запустите `rviz2 -d` с
+`config/localization-top.rviz` или `config/localization-follower.rviz` и
+`--ros-args -p use_sim_time:=true`. Затем воспроизведите выходной MCAP
+через `ros2 bag play`. В выходном bag уже есть `/clock`. Ракурс от
+третьего лица использует `base_link`, поэтому для него требуется
+выходной bag с `/tf`.
+
+В CSV поле `pipeline_ms` включает синхронизацию, конвертацию, GICP и
+публикации результата до диагностики. `processing_ms` измеряет ядро.
+`queue_ms` измеряет ожидание с момента вызова ROS-подписки до обработки.

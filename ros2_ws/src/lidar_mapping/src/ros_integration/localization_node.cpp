@@ -61,7 +61,8 @@ public:
         map_frame_ = declare_parameter<std::string>("map_frame", "map");
         odom_frame_ = declare_parameter<std::string>("odom_frame", "odom");
         base_frame_ = declare_parameter<std::string>("base_frame", "base_link");
-        const bool publish_tf = declare_parameter("publish_map_to_odom", false);
+        publish_map_to_odom_ = declare_parameter("publish_map_to_odom", false);
+        publish_odom_to_base_ = declare_parameter("publish_odom_to_base", false);
         const auto initial = declare_parameter("initial_pose_xyz_rpy",
                                                std::vector<double>(6, 0.0));
         if (initial.size() != 6) {
@@ -99,7 +100,7 @@ public:
                 throw std::runtime_error("Cannot open CSV: " + csv_path);
             }
             csv_ << "stamp_ns,status,reason,fitness_m2,overlap,correction_m,correction_rad,"
-                    "source_points,target_points,queue_ms,processing_ms,registration_ms,"
+                    "source_points,target_points,queue_ms,processing_ms,registration_ms,pipeline_ms,"
                     "x,y,z,qx,qy,qz,qw,pred_x,pred_y,pred_z\n";
             csv_ << std::setprecision(12);
         }
@@ -109,7 +110,7 @@ public:
         map_pub_ = create_publisher<CloudMsg>("~/map", rclcpp::QoS(1).transient_local());
         aligned_pub_ = create_publisher<CloudMsg>("~/aligned_cloud", rclcpp::SensorDataQoS());
         diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("~/diagnostics", 10);
-        if (publish_tf) {
+        if (publish_map_to_odom_ || publish_odom_to_base_) {
             tf_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         }
 
@@ -157,9 +158,10 @@ public:
                 }
             });
         timer_ = create_wall_timer(2ms, [this] { process_pending(); });
-        RCLCPP_INFO(get_logger(), "Loaded %zu map points from %s; map -> odom TF %s",
+        RCLCPP_INFO(get_logger(), "Loaded %zu map points from %s; map -> odom TF %s, odom -> base TF %s",
                     pipeline_->map().size(), map_path.string().c_str(),
-                    publish_tf ? "enabled" : "disabled");
+                    publish_map_to_odom_ ? "enabled" : "disabled",
+                    publish_odom_to_base_ ? "enabled" : "disabled");
     }
 
 private:
@@ -181,6 +183,7 @@ private:
             return;
         }
         auto& front = pending_.front();
+        const auto process_start = Clock::now();
         const auto stamp = rclcpp::Time(front.msg->header.stamp).nanoseconds();
         const auto odom = odometry_.pose_at(stamp);
         if (!odom && Clock::now() - front.arrival < 250ms) {
@@ -202,8 +205,10 @@ private:
         if (result.final_pose) {
             publish_estimate(scan.msg->header.stamp, *result.final_pose, *odom, result.aligned_cloud);
         }
+        const auto pipeline_ms = std::chrono::duration<double, std::milli>(
+            Clock::now() - process_start).count();
         publish_diagnostics(scan.msg->header.stamp, status, scan_status(result.status), result,
-                            wait_ms);
+                            wait_ms, pipeline_ms);
     }
 
     void publish_estimate(const builtin_interfaces::msg::Time& stamp, const Pose& estimate,
@@ -230,25 +235,34 @@ private:
             cloud.header = pose.header;
             aligned_pub_->publish(cloud);
         }
-        if (tf_) {
-            const Pose map_from_odom = estimate * odom.inverse();
-            geometry_msgs::msg::TransformStamped transform;
-            transform.header = pose.header;
-            transform.child_frame_id = odom_frame_;
-            transform.transform.translation.x = map_from_odom.translation().x();
-            transform.transform.translation.y = map_from_odom.translation().y();
-            transform.transform.translation.z = map_from_odom.translation().z();
-            const Eigen::Quaterniond quaternion(map_from_odom.linear());
-            transform.transform.rotation.x = quaternion.x();
-            transform.transform.rotation.y = quaternion.y();
-            transform.transform.rotation.z = quaternion.z();
-            transform.transform.rotation.w = quaternion.w();
-            tf_->sendTransform(transform);
+        if (publish_map_to_odom_) {
+            publish_transform(stamp, map_frame_, odom_frame_, estimate * odom.inverse());
+        }
+        if (publish_odom_to_base_) {
+            publish_transform(stamp, odom_frame_, base_frame_, odom);
         }
     }
 
+    void publish_transform(const builtin_interfaces::msg::Time& stamp, const std::string& parent,
+                           const std::string& child, const Pose& pose) {
+        geometry_msgs::msg::TransformStamped transform;
+        transform.header.stamp = stamp;
+        transform.header.frame_id = parent;
+        transform.child_frame_id = child;
+        transform.transform.translation.x = pose.translation().x();
+        transform.transform.translation.y = pose.translation().y();
+        transform.transform.translation.z = pose.translation().z();
+        const Eigen::Quaterniond quaternion(pose.linear());
+        transform.transform.rotation.x = quaternion.x();
+        transform.transform.rotation.y = quaternion.y();
+        transform.transform.rotation.z = quaternion.z();
+        transform.transform.rotation.w = quaternion.w();
+        tf_->sendTransform(transform);
+    }
+
     void publish_diagnostics(const builtin_interfaces::msg::Time& stamp, const char* status,
-                             const char* reason, const ScanResult& result, double wait_ms) {
+                             const char* reason, const ScanResult& result, double wait_ms,
+                             double pipeline_ms = 0) {
         using Level = diagnostic_msgs::msg::DiagnosticStatus;
         diagnostic_msgs::msg::DiagnosticArray message;
         message.header.stamp = stamp;
@@ -277,6 +291,7 @@ private:
         add("target_points", std::to_string(result.target_points));
         add("queue_ms", std::to_string(wait_ms));
         add("processing_ms", std::to_string(result.times.total_ms));
+        add("pipeline_ms", std::to_string(pipeline_ms));
         add("registration_ms", std::to_string(result.times.registration_ms));
         add("consecutive_failures", std::to_string(result.consecutive_failures));
         diagnostics_pub_->publish(message);
@@ -287,7 +302,7 @@ private:
                  << value(result.correction_translation_m) << ','
                  << value(result.correction_rotation_rad) << ',' << source_points << ','
                  << result.target_points << ',' << wait_ms << ',' << result.times.total_ms
-                 << ',' << result.times.registration_ms;
+                 << ',' << result.times.registration_ms << ',' << pipeline_ms;
             if (result.final_pose) {
                 const auto& pose = *result.final_pose;
                 const Eigen::Quaterniond q(pose.linear());
@@ -308,6 +323,8 @@ private:
     }
 
     std::string map_frame_, odom_frame_, base_frame_;
+    bool publish_map_to_odom_ = false;
+    bool publish_odom_to_base_ = false;
     OdometryBuffer odometry_;
     std::unique_ptr<ScanToMap> pipeline_;
     std::deque<PendingScan> pending_;

@@ -1,0 +1,65 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Fixed map
+      Enabled: true
+      Style: Points
+      Size (Pixels): 2
+      Color Transformer: FlatColor
+      Color: 110; 115; 125
+      Topic:
+        Value: /localization/map
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Aligned scan
+      Enabled: true
+      Style: Points
+      Size (Pixels): 4
+      Color Transformer: FlatColor
+      Color: 40; 235; 180
+      Topic:
+        Value: /localization/aligned_cloud
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+    - Class: rviz_default_plugins/Path
+      Name: Localization trajectory
+      Enabled: true
+      Color: 255; 130; 40
+      Line Style: Billboards
+      Line Width: 0.07
+      Topic:
+        Value: /localization/path
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+    - Class: rviz_default_plugins/Pose
+      Name: Localized robot
+      Enabled: true
+      Color: 255; 180; 55
+      Shape: Arrow
+      Topic:
+        Value: /localization/pose
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+  Enabled: true
+  Global Options:
+    Fixed Frame: map
+    Background Color: 27; 30; 35
+  Views:
+    Current:
+      Class: rviz_default_plugins/ThirdPersonFollower
+      Distance: 7
+      Pitch: 0.54
+      Yaw: 3.14
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.25
+      Target Frame: base_link
+Window Geometry:
+  Width: 1024
+  Height: 740
