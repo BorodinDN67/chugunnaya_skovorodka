@@ -150,7 +150,7 @@ def replay(args, node):
     save_results(args, scans, received, first_record, last_record, wall_time)
 
 
-def view(output, node, frame, rviz_config, publish_only):
+def view(output, node, frame, rviz_config, publish_only, topic_prefix):
     with (output / "map.pcd").open("rb") as stream:
         for line in stream:
             if line == b"DATA binary\n":
@@ -167,10 +167,14 @@ def view(output, node, frame, rviz_config, publish_only):
             p.x, p.y, p.z, q.x, q.y, q.z, q.w = (float(row[key]) for key in CSV_FIELDS[1:])
             trajectory.poses.append(pose)
     qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-    map_pub = node.create_publisher(PointCloud2, "/kiss/results/map", qos)
-    path_pub = node.create_publisher(RosPath, "/kiss/results/path", qos)
+    map_pub = node.create_publisher(PointCloud2, f"{topic_prefix}/map", qos)
+    path_pub = node.create_publisher(RosPath, f"{topic_prefix}/path", qos)
     map_pub.publish(create_cloud_xyz32(header, points.tolist()))
     path_pub.publish(trajectory)
+    node.get_logger().info(
+        f"Published {len(points)} map points and {len(trajectory.poses)} poses "
+        f"in {frame} on {topic_prefix}/map and {topic_prefix}/path"
+    )
     if publish_only:
         try:
             rclpy.spin(node)
@@ -194,6 +198,7 @@ def main():
     viewer.add_argument("--frame", default=FRAME)
     viewer.add_argument("--rviz-config", type=Path, default=HERE / "results.rviz")
     viewer.add_argument("--publish-only", action="store_true")
+    viewer.add_argument("--topic-prefix", default="/kiss/results")
     args = parser.parse_args()
     if args.command == "run":
         if args.topic.strip("/") == "utlidar/cloud_deskewed":
@@ -207,7 +212,8 @@ def main():
         if args.command == "run":
             replay(args, node)
         else:
-            view(args.output, node, args.frame, args.rviz_config, args.publish_only)
+            view(args.output, node, args.frame, args.rviz_config,
+                 args.publish_only, args.topic_prefix)
     finally:
         node.destroy_node()
         if rclpy.ok():

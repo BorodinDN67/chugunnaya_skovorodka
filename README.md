@@ -19,14 +19,16 @@
 **Установленный ROS 2 Humble.** В терминале с активным окружением ROS 2 выполните из корня репозитория:
 
 ```bash
-python3 run_kiss.py view --output demo/mapping --frame odom --rviz-config demo/mapping/guided.rviz
+python3 run_kiss.py view --output demo/mapping --frame odom --topic-prefix /kiss/guided --rviz-config demo/mapping/guided.rviz
 ```
 
 Если RViz уже открыт, загрузите `demo/mapping/guided.rviz` через **File → Open Config** и запустите публикацию карты и траектории в той же ROS-среде:
 
 ```bash
-python3 run_kiss.py view --output demo/mapping --frame odom --publish-only
+python3 run_kiss.py view --output demo/mapping --frame odom --topic-prefix /kiss/guided --publish-only
 ```
+
+При запуске в терминале должно появиться `Published 55169 map points and 1688 poses in odom`. В RViz проверьте, что вид выбран **TopDownOrtho**, а источники слоёв — `/kiss/guided/map` и `/kiss/guided/path`. Это сохранённая демонстрация из `demo/mapping`. Команда `run-kiss.ps1` запускает отдельный эксперимент автономной одометрии.
 
 ### Воспроизведение исходной записи
 
