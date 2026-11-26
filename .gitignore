@@ -1,0 +1,7 @@
+/.idea/
+/.venv/
+/__pycache__/
+/data/
+/results/
+/kiss-icp-hackathon.tar
+/kiss-icp-hackathon.tar.gz
