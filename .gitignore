@@ -1,0 +1,10 @@
+/.idea/
+/__pycache__/
+/data/
+/results/
+/kiss-icp-hackathon.tar
+/kiss-icp-hackathon.tar.gz
+/ros2_ws/*
+!/ros2_ws/src/
+/ros2_ws/src/*
+!/ros2_ws/src/lidar_mapping/
