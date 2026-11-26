@@ -66,7 +66,7 @@ trap 'exit 143' TERM
 "$(ros2 pkg prefix lidar_mapping)/lib/lidar_mapping/lidar_localization" \
     --ros-args --params-file "$package_dir/config/localization.yaml" \
     -p "map_path:=$map" -p "csv_path:=$out/trajectory.csv" \
-    -p "initial_pose_xyz_rpy:=$seed" "${tf_args[@]}" > "$out/node.log" 2>&1 &
+    -p "initial_pose_xyz_rpy:=$seed" "${tf_args[@]}" "${@:5}" > "$out/node.log" 2>&1 &
 node_pid=$!
 ros2 bag record -s mcap -o "$out/localization_bag" \
     /clock /localization/pose /localization/path /localization/map \
