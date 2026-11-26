@@ -3,7 +3,7 @@
 Пакет для исходного Docker-стенда Unitree Go2 на ROS 2 Humble.
 Compose монтирует существующий `ros2_ws` как `/ros2_ws`. Пакет находится в
 `/ros2_ws/src/lidar_mapping`. Вычислительная библиотека `lidar_core` использует
-C++17, Eigen и PCL. Будущие адаптеры ROS 2 размещаются в `src/ros_integration/`.
+C++17, Eigen и PCL. Узел локализации ROS 2 размещён в `src/ros_integration/`.
 
 ## Сборка и тесты
 
@@ -159,3 +159,62 @@ lidar_core::MapManager map(config);
 
 KD-tree строится при каждом запросе локальной карты. Синхронизацию при доступе
 из нескольких потоков обеспечивает вызывающий код.
+## Локализация на фиксированной карте
+
+`lidar_localization` использует ядро `ScanToMap` в режиме localization.
+Узел интерполирует `T_odom_base` на исходный штамп скана и передаёт позу в ядро.
+В ядре прогноз `T_prev * inverse(O_prev) * O_now` служит начальной матрицей
+PCL GICP. Источник — прореженный скан в `base_link`, цель — сферический участок
+снимка PCD вокруг прогноза в `map`. При отклонении регистрации узел публикует
+прогноз с диагностикой `fallback`. При отсутствии скобки одометрии скан
+ждёт до 250 мс и получает `dropped`. Очередь ограничена восемью сканами.
+
+| Топик | Сообщение |
+|---|---|
+| `/localization/pose` | `geometry_msgs/msg/PoseStamped` |
+| `/localization/path` | `nav_msgs/msg/Path` |
+| `/localization/map` | `sensor_msgs/msg/PointCloud2`, transient local |
+| `/localization/aligned_cloud` | `sensor_msgs/msg/PointCloud2`, sensor-data QoS |
+| `/localization/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` |
+
+### Короткий прогон в Humble
+
+Смонтируйте отдельный worktree как `/work` с правами только чтения. Поместите
+распакованный bag в `/work/data/bag_for_localization`, проверенный снимок
+карты первого этапа в `/work/results/localization/map_snapshot.pcd` и выделите
+отдельное монтирование для результатов в `/out`. Используйте образ исходного
+стенда с PCL либо дополните имеющийся образ Humble пакетами
+`build-essential cmake python3-colcon-common-extensions libpcl-dev
+ros-humble-pcl-conversions`.
+
+```bash
+export ROS_DOMAIN_ID=82 ROS_LOCALHOST_ONLY=1
+source /opt/ros/humble/setup.bash
+source /opt/unitree_msgs/setup.bash
+pkg=/work/ros2_ws/src/lidar_mapping
+CMAKE_BUILD_PARALLEL_LEVEL=2 colcon --log-base /out/log build \
+  --base-paths "$pkg" --build-base /out/build --install-base /out/install \
+  --packages-select lidar_mapping --executor sequential \
+  --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+source /out/install/setup.bash
+
+PLAY_SECONDS=10 PLAY_RATE=1.0 bash "$pkg/tools/run_localization.sh" \
+  /work/data/bag_for_localization /work/results/localization/map_snapshot.pcd \
+  /out/pilot '[1.56110,0.24249,0.33925,-0.03133,0.05347,0.81417]'
+```
+
+Вектор параметра `initial_pose_xyz_rpy` задаёт `T_map_base` на первом
+синхронизированном скане в метрах и радианах. Числа в примере получены
+сопоставлением начального фрагмента этой записи со снимком
+`results/mapping-rechecked/map.pcd`. Для другой карты или точки старта
+укажите свою начальную позу. Локальный GICP зависит от неё.
+
+Скрипт сохраняет `bag-info.txt`, `input.json`, `live-topics.txt`,
+`trajectory.csv`, `summary.json` и выходной MCAP. Он проверяет пустой
+ROS-граф перед запуском, воспроизводит только два входа с `/clock` и загружает
+конфигурацию `use_sim_time: true` из `config/localization.yaml`.
+В RViz используйте Fixed Frame `map`. Для карты выберите Transient Local,
+для совмещённого облака — Best Effort. Параметр `publish_map_to_odom`
+по умолчанию выключен. Перед включением проверьте издателей
+`ros2 topic info -v /tf` и `ros2 topic info -v /tf_static` и наличие
+нужной ветки `odom -> base_link`.

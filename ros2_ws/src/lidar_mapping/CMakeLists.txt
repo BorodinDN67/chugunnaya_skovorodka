@@ -4,6 +4,13 @@ project(lidar_mapping LANGUAGES C CXX)
 find_package(ament_cmake REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(PCL REQUIRED COMPONENTS common filters io kdtree registration)
+find_package(diagnostic_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(pcl_conversions REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 add_library(lidar_core
     src/core/se3.cpp
@@ -21,6 +28,14 @@ target_include_directories(lidar_core PUBLIC
 target_link_libraries(lidar_core PUBLIC Eigen3::Eigen pcl_common
     PRIVATE pcl_filters pcl_io pcl_kdtree pcl_registration
 )
+
+add_executable(lidar_localization src/ros_integration/localization_node.cpp)
+target_link_libraries(lidar_localization lidar_core)
+ament_target_dependencies(lidar_localization
+    diagnostic_msgs geometry_msgs nav_msgs pcl_conversions rclcpp sensor_msgs tf2_ros
+)
+install(TARGETS lidar_localization RUNTIME DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config)
 
 install(DIRECTORY include/ DESTINATION include)
 install(TARGETS lidar_core EXPORT export_lidar_core

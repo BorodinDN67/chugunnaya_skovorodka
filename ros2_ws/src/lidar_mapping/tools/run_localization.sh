@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Run inside the ROS container with independent output paths.
+set -eo pipefail
+
+: "${ROS_DOMAIN_ID:?Set a dedicated ROS_DOMAIN_ID before running}"
+export ROS_LOCALHOST_ONLY=1
+bag="${1:?Usage: run_localization.sh BAG_DIR MAP_PCD OUTPUT_DIR [XYZ_RPY]}"
+map="${2:?Missing map path}"
+out="${3:?Missing output directory}"
+seed="${4:-[0.0,0.0,0.0,0.0,0.0,0.0]}"
+rate="${PLAY_RATE:-1.0}"
+seconds="${PLAY_SECONDS:-10}"
+package_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+mkdir -p "$out"
+export ROS_LOG_DIR="$out/ros"
+ros2 bag info "$bag" > "$out/bag-info.txt"
+python3 "$package_dir/tools/inspect_localization_bag.py" "$bag" > "$out/input.json"
+
+ros2 node list --no-daemon --spin-time 1 > "$out/nodes-before.txt"
+if grep -q '[^[:space:]]' "$out/nodes-before.txt"; then
+    echo "ROS_DOMAIN_ID=$ROS_DOMAIN_ID already has nodes" >&2
+    exit 1
+fi
+
+node_pid=
+recorder_pid=
+player_pid=
+stop() {
+    local pid="$1"
+    if [[ -n "$pid" ]]; then
+        kill -INT "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    fi
+}
+cleanup() {
+    stop "$player_pid"
+    stop "$recorder_pid"
+    stop "$node_pid"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Use the installed binary directly to keep signal delivery and CSV flush deterministic.
+"$(ros2 pkg prefix lidar_mapping)/lib/lidar_mapping/lidar_localization" \
+    --ros-args --params-file "$package_dir/config/localization.yaml" \
+    -p "map_path:=$map" -p "csv_path:=$out/trajectory.csv" \
+    -p "initial_pose_xyz_rpy:=$seed" > "$out/node.log" 2>&1 &
+node_pid=$!
+ros2 bag record -s mcap -o "$out/localization_bag" \
+    /clock /localization/pose /localization/path /localization/map \
+    /localization/aligned_cloud /localization/diagnostics \
+    > "$out/record.log" 2>&1 &
+recorder_pid=$!
+sleep 2
+kill -0 "$node_pid"
+kill -0 "$recorder_pid"
+timeout 10 ros2 param get /localization use_sim_time > "$out/use-sim-time.txt"
+
+ros2 bag play "$bag" --start-paused --disable-keyboard-controls --clock 100 --rate "$rate" \
+    --topics /utlidar/cloud_base /utlidar/robot_odom \
+    > "$out/player.log" 2>&1 &
+player_pid=$!
+sleep 2
+kill -0 "$player_pid"
+for topic in /utlidar/cloud_base /utlidar/robot_odom /tf /tf_static; do
+    ros2 topic info -v --no-daemon "$topic" >> "$out/live-topics.txt" 2>&1 || true
+done
+timeout 10 ros2 service call /rosbag2_player/resume rosbag2_interfaces/srv/Resume '{}'
+sleep "$seconds"
+stop "$player_pid"
+player_pid=
+# Drain measurements already received by the localizer before closing the recorder.
+sleep 1
+stop "$node_pid"
+node_pid=
+stop "$recorder_pid"
+recorder_pid=
+ros2 bag info "$out/localization_bag" > "$out/output-bag-info.txt"
+python3 - "$out/trajectory.csv" "$out/localization_bag/metadata.yaml" <<'PYTHON' | tee "$out/summary.json"
+from collections import Counter
+import csv
+import json
+import statistics
+import sys
+import yaml
+
+with open(sys.argv[1], newline="") as stream:
+    rows = list(csv.DictReader(stream))
+with open(sys.argv[2]) as stream:
+    topics = yaml.safe_load(stream)["rosbag2_bagfile_information"]["topics_with_message_count"]
+processed = [row for row in rows if row["status"] != "dropped"]
+summary = {"statuses": Counter(row["status"] for row in rows),
+           "reasons": Counter(row["reason"] for row in rows),
+           "output_messages": {row["topic_metadata"]["name"]: row["message_count"] for row in topics}}
+for column in ("processing_ms", "registration_ms", "queue_ms"):
+    values = sorted(float(row[column]) for row in processed)
+    if values:
+        summary[column] = {"mean": statistics.mean(values),
+                           "median": statistics.median(values),
+                           "p95": values[(95 * len(values) + 99) // 100 - 1],
+                           "p99": values[(99 * len(values) + 99) // 100 - 1],
+                           "max": values[-1]}
+if len(processed) > 1:
+    summary["scan_stamp_span_s"] = (
+        int(processed[-1]["stamp_ns"]) - int(processed[0]["stamp_ns"])) / 1e9
+    summary["processed_scans_per_bag_second"] = (len(processed) - 1) / summary["scan_stamp_span_s"]
+print(json.dumps(summary, indent=2))
+required = ("/clock", "/localization/pose", "/localization/path", "/localization/map",
+            "/localization/aligned_cloud", "/localization/diagnostics")
+sys.exit(0 if summary["statuses"]["accepted"] and
+         all(summary["output_messages"].get(topic, 0) for topic in required) else 1)
+PYTHON

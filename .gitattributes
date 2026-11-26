@@ -1,1 +1,2 @@
 /play_viz.sh text eol=lf
+/ros2_ws/src/lidar_mapping/tools/*.sh text eol=lf
