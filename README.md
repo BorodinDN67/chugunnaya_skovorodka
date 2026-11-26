@@ -99,3 +99,45 @@ KISS-ICP распознаёт `time` типа FLOAT32 и нормирует ег
 | Конечные XYZ-точки в PCD | 14 498 |
 
 Для повтора запустите команду из раздела выше с `-Seconds 12`. Числа задержек зависят от машины.
+
+## Демонстрация в существующем стенде организаторов
+
+Из корня репозитория в Ubuntu WSL при запущенном `r_hacatonius`:
+
+```bash
+bash demo_stand.sh view
+bash demo_stand.sh view --top
+bash demo_stand.sh view --focus-start
+```
+
+Сценарий находит `bag_for_mapping` в `/ros2_ws`, в том числе с одним дополнительным уровнем вложенности. При первом запуске создаёт `/ros2_ws/results/kiss/control`. Используются глобальные облака `/utlidar/cloud_deskewed` и маршрут из `/utlidar/robot_odom`. RViz2 открывает карту с перспективой и сохранённым видом сверху. Цвет точек соответствует высоте. Оранжевым показан записанный маршрут. X11 и `XAUTHORITY` берутся из текущего стенда.
+
+`bash demo_stand.sh prepare` строит артефакты без GUI. При другом расположении записи задайте `KISS_MAPPING_BAG`. Для сборки новой контрольной карты в отдельном каталоге задайте `KISS_CONTROL_OUT`. Обе переменные принимают пути **внутри контейнера**.
+
+### Экспериментальная сборка KISS-ICP в том же контейнере
+
+Проверенные зависимости стенда — ROS 2 Humble, MCAP, RViz2, CMake, Ninja или Make, GCC с C++20, Eigen 3, TBB, Python NumPy, PyYAML, rclpy, rosbag2_py, sensor_msgs_py. Если dev-пакеты отсутствуют, установите `libeigen3-dev libtbb-dev` в существующем образе. CMake получает Sophus 1.22.10 и robin-map 1.2.1. Сборка и скомпилированные файлы размещаются отдельно от GICP.
+
+```bash
+docker exec r_hacatonius mkdir -p /ros2_ws/results/kiss/tools
+for f in build_stand.sh kiss_profile.patch plot_mapping.py initial_pose.py summarize_gicp.py; do
+  docker cp "$f" "r_hacatonius:/ros2_ws/results/kiss/tools/$f"
+done
+bash demo_stand.sh prepare
+docker exec r_hacatonius bash /ros2_ws/results/kiss/tools/build_stand.sh
+docker exec -e ROS_DOMAIN_ID=71 -e ROS_LOCALHOST_ONLY=1 r_hacatonius bash -lc '
+  set -eo pipefail
+  source /opt/ros/humble/setup.bash
+  source /ros2_ws/results/kiss/build/install/local_setup.bash
+  out=/ros2_ws/results/kiss/mapping_repeat
+  mkdir -p "$out"
+  python3 /ros2_ws/results/kiss/tools/stand_replay.py run \
+    --bag /ros2_ws/bag_for_mapping --output "$out" \
+    --no-deskew --voxel-size 0.10 --max-range 25 --initial-threshold 0.25 --threads 2 \
+    2>&1 | tee "$out/run.log"
+  ros2 bag info "$out/rosbag"
+'
+bash demo_stand.sh kiss-view --output /ros2_ws/results/kiss/mapping_repeat
+```
+
+Для прогона 12 с добавьте `--seconds 12`. Для графиков установите `matplotlib==3.8.4` через `pip --target` в отдельный каталог и добавьте его в `PYTHONPATH` при запуске `plot_mapping.py КАТАЛОГ_РЕЗУЛЬТАТА`. Аналогично `initial_pose.py` требует `scipy==1.13.1`; выполните скрипт в контейнере после `source /opt/ros/humble/setup.bash`, передав путь второй записи, каталог карты и путь JSON. Результаты и ограничения приведены в [KISS_EVALUATION.md](KISS_EVALUATION.md).

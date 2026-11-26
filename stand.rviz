@@ -1,0 +1,55 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/PointCloud2
+      Name: KISS-ICP map
+      Enabled: true
+      Value: true
+      Color Transformer: RGB8
+      Style: Flat Squares
+      Size (m): 0.052
+      Alpha: 1
+      Topic:
+        Value: /kiss/results/map
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+    - Class: rviz_default_plugins/Path
+      Name: KISS-ICP trajectory
+      Enabled: true
+      Value: true
+      Color: 255; 152; 73
+      Alpha: 1
+      Line Style: Billboards
+      Line Width: 0.09
+      Topic:
+        Value: /kiss/results/path
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+  Enabled: true
+  Global Options:
+    Fixed Frame: odom_lidar
+    Background Color: 11; 18; 31
+    Frame Rate: 30
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 25
+      Pitch: 0.73
+      Yaw: 0.72
+      Target Frame: <Fixed Frame>
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.03
+Window Geometry:
+  Width: 1440
+  Height: 900
+  X: 20
+  Y: 30

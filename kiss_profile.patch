@@ -1,0 +1,74 @@
+diff --git a/ros/src/OdometryServer.cpp b/ros/src/OdometryServer.cpp
+index 0d7831b..2397fb7 100644
+--- a/ros/src/OdometryServer.cpp
++++ b/ros/src/OdometryServer.cpp
+@@ -21,6 +21,7 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ // SOFTWARE.
+ #include <Eigen/Core>
++#include <chrono>
+ #include <memory>
+ #include <sophus/se3.hpp>
+ #include <utility>
+@@ -113,6 +114,7 @@ OdometryServer::OdometryServer(const rclcpp::NodeOptions &options)
+     // Initialize publishers
+     rclcpp::QoS qos((rclcpp::SystemDefaultsQoS().keep_last(1).durability_volatile()));
+     odom_publisher_ = create_publisher<nav_msgs::msg::Odometry>("kiss/odometry", qos);
++    profile_publisher_ = create_publisher<geometry_msgs::msg::Vector3Stamped>("kiss/profile", rclcpp::QoS(100));
+     if (publish_debug_clouds_) {
+         frame_publisher_ = create_publisher<sensor_msgs::msg::PointCloud2>("kiss/frame", qos);
+         kpoints_publisher_ = create_publisher<sensor_msgs::msg::PointCloud2>("kiss/keypoints", qos);
+@@ -129,18 +131,31 @@ OdometryServer::OdometryServer(const rclcpp::NodeOptions &options)
+ }
+
+ void OdometryServer::RegisterFrame(const sensor_msgs::msg::PointCloud2::ConstSharedPtr &msg) {
+-    const auto cloud_frame_id = msg->header.frame_id;
++    using Clock = std::chrono::steady_clock;
++    const auto start = Clock::now();
+     const auto points = PointCloud2ToEigen(msg);
+     const auto timestamps = GetTimestamps(msg);
+
++    const auto decoded = Clock::now();
+     // Register frame, main entry point to KISS-ICP pipeline
+     const auto &[frame, keypoints] = kiss_icp_->RegisterFrame(points, timestamps);
+
++    const auto registered = Clock::now();
+     // Extract the last KISS-ICP pose, ego-centric to the LiDAR
+     const Sophus::SE3d kiss_pose = kiss_icp_->pose();
+
+     // Spit the current estimated pose to ROS msgs handling the desired target frame
+     PublishOdometry(kiss_pose, msg->header);
++    const auto published = Clock::now();
++    const auto milliseconds = [](auto interval) {
++        return std::chrono::duration<double, std::milli>(interval).count();
++    };
++    geometry_msgs::msg::Vector3Stamped profile;
++    profile.header = msg->header;
++    profile.vector.x = milliseconds(decoded - start);
++    profile.vector.y = milliseconds(registered - decoded);
++    profile.vector.z = milliseconds(published - start);
++    profile_publisher_->publish(profile);
+     // Publishing these clouds is a bit costly, so do it only if we are debugging
+     if (publish_debug_clouds_) {
+         PublishClouds(frame, keypoints, msg->header);
+diff --git a/ros/src/OdometryServer.hpp b/ros/src/OdometryServer.hpp
+index 0f7c289..a3af616 100644
+--- a/ros/src/OdometryServer.hpp
++++ b/ros/src/OdometryServer.hpp
+@@ -22,6 +22,8 @@
+ // SOFTWARE.
+ #pragma once
+
++#include <geometry_msgs/msg/vector3_stamped.hpp>
++
+ // KISS-ICP
+ #include "kiss_icp/pipeline/KissICP.hpp"
+
+@@ -69,6 +71,7 @@ private:
+     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
+
+     /// Data publishers.
++    rclcpp::Publisher<geometry_msgs::msg::Vector3Stamped>::SharedPtr profile_publisher_;
+     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
+     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr frame_publisher_;
+     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr kpoints_publisher_;
