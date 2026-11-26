@@ -34,7 +34,7 @@ RUN mkdir -p /tmp/kiss_ws/src \
     && install -Dm644 src/kiss-icp/LICENSE /opt/kiss_ws/LICENSE-KISS-ICP
 
 # ---------- Этап 2: финальный образ ----------
-FROM ros:humble-ros-base
+FROM ros:humble-ros-base AS replay
 
 ENV DEBIAN_FRONTEND=noninteractive \
     ROS_DISTRO=humble \
@@ -54,23 +54,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
     libxcb-randr0 libxcb-render-util0 \
     libxcb-xinerama0 libxcb-xkb1 \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    -o Dpkg::Options::=--force-unsafe-io \
-    git build-essential cmake gdb \
-    python3-pip python3-colcon-common-extensions python3-vcstool python3-rosdep \
-    ros-${ROS_DISTRO}-ament-cmake \
-    ros-${ROS_DISTRO}-rosidl-default-generators \
-    ros-${ROS_DISTRO}-navigation2 \
-    ros-${ROS_DISTRO}-nav2-bringup \
-    ros-${ROS_DISTRO}-nav2-msgs \
-    ros-${ROS_DISTRO}-nav2-map-server \
-    ros-${ROS_DISTRO}-slam-toolbox \
-    ros-${ROS_DISTRO}-pcl-ros \
-    ros-${ROS_DISTRO}-pcl-conversions \
-    ros-${ROS_DISTRO}-pointcloud-to-laserscan \
-    ros-${ROS_DISTRO}-robot-localization \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/unitree_msgs /opt/unitree_msgs
@@ -96,3 +79,24 @@ ENTRYPOINT ["/bin/bash", "-c", \
      && if [ -f /ros2_ws/install/setup.bash ]; then source /ros2_ws/install/setup.bash; fi \
      && exec \"$@\"", "--"]
 CMD ["bash"]
+
+# Optional development environment from the hackathon Dockerfile.
+FROM replay AS full
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    -o Dpkg::Options::=--force-unsafe-io \
+    git build-essential cmake gdb \
+    python3-pip python3-colcon-common-extensions python3-vcstool python3-rosdep \
+    ros-${ROS_DISTRO}-ament-cmake \
+    ros-${ROS_DISTRO}-rosidl-default-generators \
+    ros-${ROS_DISTRO}-navigation2 \
+    ros-${ROS_DISTRO}-nav2-bringup \
+    ros-${ROS_DISTRO}-nav2-msgs \
+    ros-${ROS_DISTRO}-nav2-map-server \
+    ros-${ROS_DISTRO}-slam-toolbox \
+    ros-${ROS_DISTRO}-pcl-ros \
+    ros-${ROS_DISTRO}-pcl-conversions \
+    ros-${ROS_DISTRO}-pointcloud-to-laserscan \
+    ros-${ROS_DISTRO}-robot-localization \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM replay AS portable
