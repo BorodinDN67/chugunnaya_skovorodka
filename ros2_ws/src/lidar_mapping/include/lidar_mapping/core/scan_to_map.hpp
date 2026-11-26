@@ -14,6 +14,8 @@ struct RegistrationQuality {
     double max_correction_translation_m;
     double max_correction_rotation_rad;
     std::size_t failures_until_lost;
+    double max_odometry_drift_m = 0;  // Zero disables this mapping guard.
+    double max_odometry_drift_rad = 0;
 };
 
 struct ScanToMapConfig {
@@ -31,7 +33,7 @@ enum class TrackingStatus { waiting, initialized, tracking, odometry_only, degra
 enum class ScanStatus {
     awaiting_initial_pose, awaiting_map, missing_odometry, invalid_odometry, stale_scan,
     invalid_prediction, insufficient_source, insufficient_target, map_initialization_failed, initialized, odometry_only, registration_failed,
-    invalid_candidate, fitness_rejected, overlap_rejected, correction_rejected, accepted
+    invalid_candidate, fitness_rejected, overlap_rejected, correction_rejected, accepted, odometry_anchor_rejected
 };
 
 struct StageTimes {
@@ -94,6 +96,7 @@ private:
     MapManager map_;
     std::optional<Pose> pose_;
     std::optional<Pose> previous_odometry_;
+    std::optional<Pose> anchored_map_from_odom_;
     std::optional<TimestampNs> previous_stamp_;
     TrackingStatus tracking_ = TrackingStatus::waiting;
     std::size_t consecutive_failures_ = 0;

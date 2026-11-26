@@ -5,6 +5,17 @@ find_package(ament_cmake REQUIRED)
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 find_package(PCL REQUIRED COMPONENTS common filters io kdtree registration)
 
+find_package(rclcpp REQUIRED)
+find_package(rcl_interfaces REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(pcl_conversions REQUIRED)
+
 add_library(lidar_core
     src/core/se3.cpp
     src/core/odometry_buffer.cpp
@@ -30,6 +41,18 @@ install(TARGETS lidar_core EXPORT export_lidar_core
 )
 ament_export_targets(export_lidar_core HAS_LIBRARY_TARGET)
 ament_export_dependencies(Eigen3 PCL)
+
+add_executable(lidar_mapping_node
+    src/ros_integration/lidar_mapping_node.cpp
+    src/ros_integration/node_config.cpp
+)
+target_link_libraries(lidar_mapping_node lidar_core)
+ament_target_dependencies(lidar_mapping_node
+    rclcpp rcl_interfaces builtin_interfaces sensor_msgs nav_msgs geometry_msgs
+    diagnostic_msgs std_srvs tf2_ros pcl_conversions
+)
+install(TARGETS lidar_mapping_node DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)

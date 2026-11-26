@@ -3,7 +3,7 @@
 Пакет для исходного Docker-стенда Unitree Go2 на ROS 2 Humble.
 Compose монтирует существующий `ros2_ws` как `/ros2_ws`. Пакет находится в
 `/ros2_ws/src/lidar_mapping`. Вычислительная библиотека `lidar_core` использует
-C++17, Eigen и PCL. Будущие адаптеры ROS 2 размещаются в `src/ros_integration/`.
+C++17, Eigen и PCL. ROS 2 адаптер и команды запуска описаны в [src/ros_integration/README.md](src/ros_integration/README.md).
 
 ## Сборка и тесты
 
@@ -16,15 +16,16 @@ docker exec -it r_hacatonius bash -l
 В контейнере:
 
 ```bash
+source /opt/ros/humble/setup.bash
 cd /ros2_ws
 colcon build --packages-select lidar_mapping --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
-colcon test --packages-select lidar_mapping --event-handlers console_direct+
-colcon test-result --verbose
+colcon test --packages-select lidar_mapping --return-code-on-test-failure --event-handlers console_direct+
+colcon test-result --all --verbose
 ```
 
 Манифест перечисляет зависимости сборки и тестов. Если в целевом образе
 отсутствует тестовая зависимость `ament_cmake_gtest`, для запуска тестов
-понадобится пакет `ros-humble-ament-cmake-gtest`. Сборка и тесты в Humble ожидают проверки.
+понадобится пакет `ros-humble-ament-cmake-gtest`. В проверенном образе он доступен. Сборка прошла с PCL 1.12.1 и Eigen 3.4.0. Пройдены 21 модульный и один сквозной синтетический тест. Результаты приведены в [журнале проекта](../../../agent/PROGRESS.md).
 
 ## Вычислительные компоненты
 
@@ -54,7 +55,7 @@ GICP локален и чувствителен к начальному приб
 
 `ScanToMap(ScanToMapConfig, MapMode)` связывает буфер одометрии,
 предобработку, предсказание SE(3), локальную карту и PCL GICP.
-Будущий ROS 2 адаптер может использовать один из двух способов передачи одометрии.
+Ядро поддерживает два способа передачи одометрии. ROS 2 адаптер использует второй способ с существующим `OdometryBuffer`.
 
 - `push_odometry(stamp_ns, T_odom_robot)` и `process(scan, stamp_ns)` используют
   интерполяцию буфера. При отсутствии подходящего отсчёта результат позволяет

@@ -26,7 +26,16 @@ bool valid_quality(const RegistrationQuality& quality) {
            std::isfinite(quality.max_correction_translation_m) &&
            quality.max_correction_translation_m >= 0 &&
            std::isfinite(quality.max_correction_rotation_rad) &&
-           quality.max_correction_rotation_rad >= 0;
+           quality.max_correction_rotation_rad >= 0 &&
+           std::isfinite(quality.max_odometry_drift_m) && quality.max_odometry_drift_m >= 0 &&
+           std::isfinite(quality.max_odometry_drift_rad) && quality.max_odometry_drift_rad >= 0;
+}
+
+bool outside_odometry_anchor(const Pose& pose, const Pose& anchor, const RegistrationQuality& quality) {
+    const Pose delta = relative_motion(anchor, pose);
+    const double angle = Eigen::AngleAxisd(Eigen::Quaterniond(delta.linear()).normalized()).angle();
+    return (quality.max_odometry_drift_m > 0 && delta.translation().norm() > quality.max_odometry_drift_m) ||
+           (quality.max_odometry_drift_rad > 0 && angle > quality.max_odometry_drift_rad);
 }
 
 }  // namespace
@@ -51,6 +60,7 @@ bool ScanToMap::start_session(const Pose& initial_map_from_robot) {
     pose_ = initial_map_from_robot;
     odometry_.clear();
     previous_odometry_.reset();
+    anchored_map_from_odom_.reset();
     previous_stamp_.reset();
     consecutive_failures_ = 0;
     tracking_ = TrackingStatus::waiting;
@@ -125,8 +135,18 @@ ScanResult ScanToMap::process_scan(const PointCloud& scan, TimestampNs stamp,
         return finish();
     }
 
-    const Pose prediction = previous_odometry_
+    Pose prediction = previous_odometry_
         ? predict_pose(*pose_, *previous_odometry_, *current_odometry) : *pose_;
+    std::optional<Pose> map_from_odom;
+    Pose anchored_pose = Pose::Identity();
+    if (mode_ == MapMode::mapping && config_.enable_registration &&
+        (config_.quality.max_odometry_drift_m > 0 || config_.quality.max_odometry_drift_rad > 0)) {
+        map_from_odom = anchored_map_from_odom_.value_or(*pose_ * current_odometry->inverse());
+        anchored_pose = *map_from_odom * *current_odometry;
+        if (outside_odometry_anchor(prediction, anchored_pose, config_.quality)) {
+            prediction = anchored_pose;
+        }
+    }
     result.times.prediction_ms = lap();
     if (!is_rigid_transform(prediction.matrix())) {
         result.status = ScanStatus::invalid_prediction;
@@ -153,6 +173,11 @@ ScanResult ScanToMap::process_scan(const PointCloud& scan, TimestampNs stamp,
             result.registration = registration_.align(source, target, prediction.matrix().cast<float>());
             result.times.registration_ms = lap();
             result.status = validate_registration(prediction, result, estimate);
+            if (result.status == ScanStatus::accepted && map_from_odom &&
+                outside_odometry_anchor(estimate, anchored_pose, config_.quality)) {
+                result.status = ScanStatus::odometry_anchor_rejected;
+                estimate = prediction;
+            }
             result.times.validation_ms = lap();
         }
     }
@@ -178,6 +203,7 @@ ScanResult ScanToMap::process_scan(const PointCloud& scan, TimestampNs stamp,
     // Also consume valid odometry on fallback frames so no delta is applied twice.
     pose_ = estimate;
     previous_odometry_ = *current_odometry;
+    anchored_map_from_odom_ = map_from_odom;
     previous_stamp_ = stamp;
     result.final_pose = estimate;
     if (accepted || first_mapping_scan || odometry_only) {

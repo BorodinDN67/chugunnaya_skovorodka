@@ -1,0 +1,60 @@
+lidar_mapping:
+  ros__parameters:
+    topics:
+      cloud_base: /utlidar/cloud_base
+      cloud_deskewed: /utlidar/cloud_deskewed
+      odometry: /utlidar/robot_odom
+    frames:
+      map: map
+      odom: odom
+      base: base_link
+    qos:
+      cloud_depth: 2048
+      odometry_depth: 20000
+    sync:
+      pending_capacity: 2048
+      wait_ms: 2500
+      odometry_capacity: 20000
+      max_odometry_gap_ms: 50
+    publish:
+      map_to_odom_tf: true
+      odom_to_base_tf: true
+      map_period_ms: 1000
+      path_capacity: 3000
+    cloud:
+      min_range_m: 0.3
+      max_range_m: 40.0
+      voxel_size_m: 0.05
+    gicp:
+      max_correspondence_m: 0.5
+      overlap_distance_m: 0.2
+      max_iterations: 30
+      covariance_neighbors: 16
+    quality:
+      min_points: 80
+      max_fitness_m2: 0.12
+      min_overlap: 0.5
+      max_correction_m: 0.12
+      max_correction_rad: 0.1
+      failures_until_lost: 4
+    map:
+      directory: /ros2_ws/results/localization_full
+      input_file: map_localization.pcd
+      voxel_size_m: 0.08
+      local_radius_m: 10.0
+      keyframe_translation_m: 0.2
+      keyframe_rotation_deg: 10.0
+      downsample_every: 4
+    output:
+      save_on_shutdown: false
+      metrics_file: /ros2_ws/results/localization_full/localization_metrics.csv
+    mode: gicp_localization
+    use_sim_time: true
+    initial_pose_xyz_xyzw:
+    - 1.1789118454042686
+    - 0.2779331154402283
+    - 0.31314033853506407
+    - -0.022684087335479067
+    - 0.006881845794399038
+    - 0.37473963716010683
+    - 0.9268269939537422
