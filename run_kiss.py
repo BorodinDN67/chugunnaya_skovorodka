@@ -100,7 +100,7 @@ def replay(args, node):
             sent, cloud = match
             received.append(((sent, time.monotonic()), cloud, pose))
 
-    subscription = node.create_subscription(Odometry, "/kiss/odometry", receive, 100)
+    node.create_subscription(Odometry, "/kiss/odometry", receive, 100)
     with subprocess.Popen([
         str(Path(get_package_prefix("kiss_icp")) / "lib/kiss_icp/kiss_icp_node"), "--ros-args",
         "-r", "pointcloud_topic:=/replay/points", "-p", f"deskew:={str(args.deskew).lower()}",
@@ -109,7 +109,7 @@ def replay(args, node):
     ]) as process:
         try:
             deadline = time.monotonic() + 20
-            while not (publisher.get_subscription_count() and subscription.get_publisher_count()):
+            while not (publisher.get_subscription_count() and node.count_publishers("/kiss/odometry")):
                 if process.poll() is not None or time.monotonic() >= deadline:
                     raise RuntimeError("KISS-ICP did not connect")
                 rclpy.spin_once(node, timeout_sec=0.05)
