@@ -4,6 +4,32 @@
 
 ## Запуск на второй машине
 
+### Готовая карта для RViz
+
+В этой ветке сохранён полный офлайн-прогон `bag_for_mapping` с начальным приближением от одометрии Unitree. Карта `demo/mapping/map.pcd` содержит 55 169 точек, траектория `demo/mapping/trajectory.csv` — 1 688 поз. Оба файла используют систему `odom`. Для просмотра достаточно файлов этой ветки и ROS 2 Humble с RViz. Rosbag и пересборка образа не требуются.
+
+**Windows 11 с Docker Desktop.** Обновите ветку `codex/kiss-icp`, запустите VcXsrv на дисплее `0` и выполните в PowerShell из корня репозитория:
+
+```powershell
+.\view-guided.ps1
+```
+
+Скрипт использует локальный образ `kiss-icp-hackathon:humble`. Если его ещё нет, скачайте архив и один раз выполните `docker load -i .\kiss-icp-hackathon.tar.gz`. [Скачать Docker-образ](https://github.com/BorodinDN67/chugunnaya_skovorodka/releases/download/kiss-icp-humble-v1/kiss-icp-hackathon.tar.gz)
+
+**Установленный ROS 2 Humble.** В терминале с активным окружением ROS 2 выполните из корня репозитория:
+
+```bash
+python3 run_kiss.py view --output demo/mapping --frame odom --rviz-config demo/mapping/guided.rviz
+```
+
+Если RViz уже открыт, загрузите `demo/mapping/guided.rviz` через **File → Open Config** и запустите публикацию карты и траектории в той же ROS-среде:
+
+```bash
+python3 run_kiss.py view --output demo/mapping --frame odom --publish-only
+```
+
+### Воспроизведение исходной записи
+
 Скачайте `bag_for_mapping.zip` и распакуйте в папку `data`. Путь к записи должен указывать на каталог, в котором лежат `metadata.yaml` и `bag_for_mapping_0.mcap`. [Скачать ZIP записи из исходного репозитория](https://media.githubusercontent.com/media/ivr0ma/hackathon/ecbeeb681f7fe1e274402623da27444f63a4c61a/hackathon/ros2_ws/bag_for_mapping.zip)
 
 Скачайте архив образа в корень репозитория и выполните команды в PowerShell. [Образ для загрузки на второй машине](https://github.com/BorodinDN67/chugunnaya_skovorodka/releases/tag/kiss-icp-humble-v1)

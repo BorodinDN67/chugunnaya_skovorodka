@@ -1,0 +1,31 @@
+{
+  "input_scans": 1688,
+  "processed_scans": 1688,
+  "map_points": 55169,
+  "method": "KISS-ICP 1.2.3 scan-to-map initialized per scan by Unitree odometry",
+  "topic": "/utlidar/cloud_base",
+  "deskew": false,
+  "frame": "odom",
+  "mode": "offline",
+  "voxel_m": 0.15,
+  "max_correspondence_m": 0.15,
+  "fallback_to_prior": 275,
+  "guided": {
+    "path_m": 65.26328570866971,
+    "step_p95_m": 0.0797896690456482,
+    "max_step_m": 0.126912141031097,
+    "steps_over_0_5m": 0
+  },
+  "unitree": {
+    "path_m": 41.557368005498326,
+    "step_p95_m": 0.04947733198327864,
+    "max_step_m": 0.061911449377769934,
+    "steps_over_0_5m": 0
+  },
+  "tight_without_prior": {
+    "path_m": 190.79045286230263,
+    "step_p95_m": 0.296088232768032,
+    "max_step_m": 0.5771906539475188,
+    "steps_over_0_5m": 17
+  }
+}
